@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Алгоритм — Future Oracle{% endblock %}
+{% block body %}
+<article class="page prose">
+  <h1>Как считается прогноз</h1>
+  <p class="lede">
+    Модель нарочно простая: правила и веса, без чёрного ящика. Нейросеть не участвует в скоринге —
+    только фиксированный лексикон заголовков. Так цифры в карточке можно пересчитать на бумаге.
+  </p>
+
+  <h2>1. Что прогнозируем</h2>
+  <p>
+    Направление цены актива через 24 часа: <code>up</code> / <code>down</code> / <code>sideways</code>.
+    Это не цена, не доходность и не торговый сигнал.
+  </p>
+
+  <h2>2. Откуда данные</h2>
+  <ul>
+    <li><strong>CoinGecko</strong> — цена, Δ24ч, Δ7д, объём, high/low, 8-дневный ряд для бэктеста.</li>
+    <li><strong>Alternative.me Fear &amp; Greed</strong> — дневной индекс настроения рынка.</li>
+    <li><strong>CryptoCompare + CoinDesk RSS + Cointelegraph RSS</strong> — заголовки.</li>
+  </ul>
+  <p>Сырой JSON/RSS кладётся в <code>raw_records</code>, нормализованные поля — в отдельные таблицы.</p>
+
+  <h2>3. Пять сигналов ∈ [−1; +1]</h2>
+  <div class="formula">
+momentum = 0.65 * clip(Δ24h / 15) + 0.35 * clip(Δ7d / 25)<br>
+volume   = sign(momentum) * tanh(volume_ratio − 1)<br>
+range    = clip((0.5 − position_in_24h_range) * 2)   # mean reversion<br>
+news     = Σ (decay * mention_weight * lexicon_sentiment) / Σ weights<br>
+f&amp;g      = (50 − fear_greed) / 50                   # контрарий
+  </div>
+  <p>
+    Сентимент заголовка: (бычьих фраз − медвежьих) / сумма совпадений.
+    Вес новости затухает с периодом полураспада 18 часов. Рыночные заголовки без тикера
+    получают вес 0.35 на все активы.
+  </p>
+
+  <h2>4. Сборка</h2>
+  <div class="formula">
+score = 0.28·momentum + 0.18·volume + 0.12·range + 0.25·news + 0.17·f&amp;g<br>
+P(up) = sigmoid(3.2 * score)<br>
+direction = up если score &gt; 0.12, down если score &lt; −0.12, иначе sideways<br>
+confidence = 100 * (0.50*|score| + 0.32*agreement + 0.18*news_coverage) [* 0.85 если vol&gt;8%]
+  </div>
+  <p>
+    <code>agreement</code> — доля ненулевых сигналов с тем же знаком, что и score.
+    <code>news_coverage</code> = min(1, число заголовков / 5).
+    Уверенность ≠ вероятность: P(рост) — оценка направления, уверенность — насколько сигналы согласованы и свежи.
+  </p>
+
+  <h2>5. Риск</h2>
+  <p>
+    Риск высокий, если против итогового знака смотрят несколько сигналов, мало новостей,
+    узкий score или широкий внутридневной диапазон. Тексты риска собираются из тех же полей, не из LLM.
+  </p>
+
+  <h2>6. Как система понимает, что ошиблась</h2>
+  <p>
+    У каждого прогноза есть <code>resolve_after = as_of + 24h</code> и цена на момент расчёта.
+    Когда появляется более поздний снимок:
+  </p>
+  <div class="formula">
+return = (price_later / price_then − 1) * 100<br>
+actual = up если return &gt; +0.5, down если return &lt; −0.5, иначе sideways<br>
+was_correct = (direction == actual)<br>
+brier = (P(up) − target)²   # target 1 / 0 / 0.5
+  </div>
+  <p>
+    На первом запуске живые 24 часа ещё не прошли — поэтому сразу считается бэктест по дневным свечам
+    CoinGecko за последние 6 дней. Это те же формулы, только <code>as_of</code> сдвинут в прошлое,
+    а новости берутся строго не позже этой даты. Ошибки видны на странице «Ошибки».
+  </p>
+
+  <h2>7. Что здесь не делается</h2>
+  <ul>
+    <li>Нет ставок, кошельков, API бирж с ордерами.</li>
+    <li>Нет обещания edge: бэктест короткий и легко врёт.</li>
+    <li>Лексикон грубый — ирония и сарказм ему неподвластны. Это честный риск модели.</li>
+  </ul>
+</article>
+{% endblock %}

@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}{{ asset.symbol }} — прогноз{% endblock %}
+{% block body %}
+<section class="page">
+  <div class="symbol">{{ asset.symbol }} · {{ asset.name }} · горизонт 24 часа</div>
+  <h1>{{ DIRECTION_RU[forecast.direction]|capitalize }} с вероятностью {{ '%.0f'|format(forecast.probability_up * 100) }}%</h1>
+  <p class="lede">
+    Цена в момент расчёта ${{ forecast.price_at_forecast|price }}.
+    Score {{ '%+.4f'|format(forecast.indicator.score) }} считается как взвешенная сумма пяти сигналов из сохранённых таблиц.
+  </p>
+
+  <div class="forecast-head">
+    <div class="panel">
+      <div class="k" style="font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">Прогноз</div>
+      <div class="big-dir {{ forecast.direction }} dir {{ forecast.direction }}">{{ DIRECTION_RU[forecast.direction]|capitalize }}</div>
+      <div class="metrics">
+        <div>
+          <div class="k">P(рост)</div>
+          <div class="v">{{ '%.1f'|format(forecast.probability_up * 100) }}%</div>
+        </div>
+        <div>
+          <div class="k">Уверенность</div>
+          <div class="v">{{ '%.1f'|format(forecast.confidence) }}%</div>
+        </div>
+        <div>
+          <div class="k">Риск</div>
+          <div class="v"><span class="chip {{ forecast.risk_level }}">{{ RISK_RU[forecast.risk_level] }}</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="k" style="font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">Как поймём ошибку</div>
+      <p>
+        Через 24 часа берём следующую цену из <code>market_snapshots</code>.
+        Факт: рост если Δ &gt; +0.5%, снижение если Δ &lt; −0.5%, иначе боковик.
+        Совпадение направления = верно. Для вероятности пишется Brier: (P(рост) − факт)².
+      </p>
+      {% if forecast.resolved_at %}
+        <p><span class="chip {{ forecast.was_correct }}">{% if forecast.was_correct %}верно{% else %}ошибка{% endif %}</span> {{ forecast.resolution_notes }}</p>
+      {% else %}
+        <p>Ждём разрешение после {{ forecast.resolve_after|when }} UTC.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="panel math">
+    <h2 style="font-family:var(--serif);margin:0 0 12px;font-size:26px;">Арифметика, которая должна сойтись</h2>
+    <p class="lede">score = 0.28·momentum + 0.18·volume + 0.12·range + 0.25·news + 0.17·fear_greed</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Сигнал</th>
+          <th>Сырые данные</th>
+          <th>Норм. [-1; 1]</th>
+          <th>Вес</th>
+          <th>Вклад</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set c = breakdown.components %}
+        {% set w = breakdown.weighted %}
+        {% set m = breakdown.meta %}
+        <tr>
+          <td>momentum</td>
+          <td>Δ24ч {{ m.momentum.change_24h_pct|pct }}, Δ7д {{ m.momentum.change_7d_pct|pct }}</td>
+          <td>{{ '%+.3f'|format(c.momentum) }}</td>
+          <td>0.28</td>
+          <td class="{% if w.momentum >= 0 %}pos{% else %}neg{% endif %}">{{ '%+.4f'|format(w.momentum) }}</td>
+        </tr>
+        <tr>
+          <td>volume</td>
+          <td>{% if m.volume.volume_ratio is not none %}ratio {{ '%.2f'|format(m.volume.volume_ratio) }}×{% else %}нет истории{% endif %}</td>
+          <td>{{ '%+.3f'|format(c.volume) }}</td>
+          <td>0.18</td>
+          <td class="{% if w.volume >= 0 %}pos{% else %}neg{% endif %}">{{ '%+.4f'|format(w.volume) }}</td>
+        </tr>
+        <tr>
+          <td>range</td>
+          <td>{% if m.range.position_in_range is not none %}позиция {{ '%.0f'|format(m.range.position_in_range * 100) }}% диапазона{% else %}нет high/low{% endif %}</td>
+          <td>{{ '%+.3f'|format(c.range) }}</td>
+          <td>0.12</td>
+          <td class="{% if w.range >= 0 %}pos{% else %}neg{% endif %}">{{ '%+.4f'|format(w.range) }}</td>
+        </tr>
+        <tr>
+          <td>news</td>
+          <td>{{ breakdown.news_count }} заголовков, сентимент {{ '%+.3f'|format(c.news) }}</td>
+          <td>{{ '%+.3f'|format(c.news) }}</td>
+          <td>0.25</td>
+          <td class="{% if w.news >= 0 %}pos{% else %}neg{% endif %}">{{ '%+.4f'|format(w.news) }}</td>
+        </tr>
+        <tr>
+          <td>fear_greed</td>
+          <td>{% if m.fear_greed.fear_greed is not none %}{{ m.fear_greed.fear_greed }}{% else %}нет{% endif %}</td>
+          <td>{{ '%+.3f'|format(c.fear_greed) }}</td>
+          <td>0.17</td>
+          <td class="{% if w.fear_greed >= 0 %}pos{% else %}neg{% endif %}">{{ '%+.4f'|format(w.fear_greed) }}</td>
+        </tr>
+        <tr>
+          <td colspan="4">Итого score</td>
+          <td><strong>{{ '%+.4f'|format(breakdown.score) }}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="lede" style="margin-top:12px">
+      P(рост) = 1 / (1 + e<sup>−3.2 · score</sup>) = {{ '%.1f'|format(forecast.probability_up * 100) }}%.
+      Направление: score &gt; +0.12 рост, &lt; −0.12 снижение, иначе боковик.
+      Уверенность = 100 · (0.50·|score| + 0.32·согласие + 0.18·покрытие новостей){% if forecast.indicator.volatility_pct and forecast.indicator.volatility_pct > 8 %} × 0.85 за волатильность {{ '%.1f'|format(forecast.indicator.volatility_pct) }}%{% endif %}
+      = {{ '%.1f'|format(forecast.confidence) }}%. Согласие сигналов {{ '%.0f'|format(forecast.indicator.agreement * 100) }}%.
+    </p>
+  </div>
+
+  <div class="split">
+    <div class="panel">
+      <h2 style="font-family:var(--serif);margin:0 0 12px;font-size:24px;">Аргументы</h2>
+      <ol class="list">
+        {% for item in payload.arguments %}
+          <li>{{ item }}</li>
+        {% endfor %}
+      </ol>
+    </div>
+    <div class="panel">
+      <h2 style="font-family:var(--serif);margin:0 0 12px;font-size:24px;">Почему может не сработать</h2>
+      <ul class="list">
+        {% for item in payload.risk_notes %}
+          <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:14px">
+    <h2 style="font-family:var(--serif);margin:0 0 12px;font-size:24px;">Новости, которые вошли в score</h2>
+    <div class="news">
+      {% for item in used.get('news', []) %}
+        <a href="{{ item.url }}" target="_blank" rel="noreferrer">
+          <span class="{% if item.sentiment > 0 %}pos{% elif item.sentiment < 0 %}neg{% endif %}">{{ '%+.2f'|format(item.sentiment) }}</span>
+          · {{ item.title }}
+          <div class="s">{{ item.published_at }} · вес {{ item.weight }}</div>
+        </a>
+      {% else %}
+        <p class="lede">За 48 часов до расчёта релевантных заголовков не нашлось — news = 0.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="split" style="margin-top:14px">
+    <div class="panel">
+      <h2 style="font-family:var(--serif);margin:0 0 12px;font-size:24px;">Снимки рынка</h2>
+      <table>
+        <thead><tr><th>Когда</th><th>Цена</th><th>Δ24ч</th><th>live</th></tr></thead>
+        <tbody>
+          {% for s in snapshots %}
+            <tr>
+              <td>{{ s.captured_at|when }}</td>
+              <td>${{ s.price_usd|price }}</td>
+              <td>{{ s.change_24h_pct|pct }}</td>
+              <td>{% if s.is_live %}да{% else %}история{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2 style="font-family:var(--serif);margin:0 0 12px;font-size:24px;">История по активу</h2>
+      <table>
+        <thead><tr><th>as_of</th><th>прогноз</th><th>факт</th><th></th></tr></thead>
+        <tbody>
+          {% for h in history %}
+            <tr>
+              <td>{{ h.as_of|when }}</td>
+              <td>{{ DIRECTION_RU[h.direction] }}</td>
+              <td>{% if h.actual_direction %}{{ DIRECTION_RU[h.actual_direction] }} {{ h.actual_return_pct|pct }}{% else %}ждём{% endif %}</td>
+              <td>{% if h.was_correct is not none %}<span class="chip {{ h.was_correct }}">{% if h.was_correct %}верно{% else %}ошибка{% endif %}</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

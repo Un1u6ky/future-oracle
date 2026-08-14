@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Данные — Future Oracle{% endblock %}
+{% block body %}
+<section class="page">
+  <h1>Откуда что взялось</h1>
+  <p class="lede">Источники, сырые записи и нормализованные новости лежат в SQLite <code>data/oracle.db</code>.</p>
+
+  <div class="panel data" style="margin-top:22px">
+    <h2 style="font-family:var(--serif);margin:0 0 12px;font-size:24px;">Источники</h2>
+    <table>
+      <thead>
+        <tr><th>Код</th><th>Имя</th><th>Тип</th><th>Последний fetch</th><th>Статус</th></tr>
+      </thead>
+      <tbody>
+        {% for s in sources %}
+          <tr>
+            <td>{{ s.code }}</td>
+            <td><a href="{{ s.url }}" target="_blank" rel="noreferrer">{{ s.name }}</a></td>
+            <td>{{ s.kind }}</td>
+            <td>{{ s.last_fetched_at|when }}</td>
+            <td>{{ s.last_status or "—" }}{% if s.last_error %} · {{ s.last_error }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel data" style="margin-top:14px">
+    <h2 style="font-family:var(--serif);margin:0 0 12px;font-size:24px;">Последние заголовки</h2>
+    <table>
+      <thead><tr><th>Сентимент</th><th>Заголовок</th><th>Когда</th></tr></thead>
+      <tbody>
+        {% for n in news %}
+          <tr>
+            <td class="{% if n.sentiment > 0 %}pos{% elif n.sentiment < 0 %}neg{% endif %}">{{ '%+.2f'|format(n.sentiment) }}</td>
+            <td><a href="{{ n.url }}" target="_blank" rel="noreferrer">{{ n.title }}</a></td>
+            <td>{{ n.published_at|when }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

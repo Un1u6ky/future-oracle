@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Ошибки — Future Oracle{% endblock %}
+{% block body %}
+<section class="page">
+  <h1>Где модель уже ошиблась</h1>
+  <p class="lede">
+    Разрешённые прогнозы: {{ accuracy.correct }} из {{ accuracy.resolved }}
+    {% if accuracy.accuracy is not none %}({{ '%.0f'|format(accuracy.accuracy) }}%){% endif %}.
+    Brier {{ '%.3f'|format(accuracy.brier) if accuracy.brier is not none else "—" }} —
+    чем ближе к 0, тем честнее вероятности. Большинство строк ниже — бэктест по дневным свечам,
+    не «магическая точность в проде».
+    Наивный baseline «всегда down» на этом окне:
+    {% if accuracy.baseline_down is not none %}{{ '%.0f'|format(accuracy.baseline_down) }}%{% else %}—{% endif %}.
+    Если модель ниже baseline — это тоже результат: контрарий Fear & Greed и mean-reversion
+    на падающем рынке систематически опаздывают.
+  </p>
+
+  <div class="panel hist" style="margin-top:22px">
+    <table>
+      <thead>
+        <tr>
+          <th>as_of</th>
+          <th>Актив</th>
+          <th>Тип</th>
+          <th>Прогноз</th>
+          <th>P(рост)</th>
+          <th>Факт</th>
+          <th>Δ</th>
+          <th>Brier</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r.as_of|when }}</td>
+            <td><a href="/asset/{{ r.asset.symbol }}">{{ r.asset.symbol }}</a></td>
+            <td>{{ r.kind }}</td>
+            <td>{{ DIRECTION_RU[r.direction] }}</td>
+            <td>{{ '%.0f'|format(r.probability_up * 100) }}%</td>
+            <td>{% if r.actual_direction %}{{ DIRECTION_RU[r.actual_direction] }}{% endif %}</td>
+            <td>{{ r.actual_return_pct|pct }}</td>
+            <td>{% if r.brier is not none %}{{ '%.3f'|format(r.brier) }}{% endif %}</td>
+            <td><span class="chip {{ r.was_correct }}">{% if r.was_correct %}верно{% else %}ошибка{% endif %}</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

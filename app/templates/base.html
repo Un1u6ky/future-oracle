@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Future Oracle{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <div class="banner">
+    Учебный прототип. Не финансовый совет, не сигнал к сделкам. Реальные деньги не подключаются, доходность не обещается.
+  </div>
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="/">
+        <span class="brand-kicker">Future Oracle</span>
+        <span class="brand-name">Crypto Pulse</span>
+      </a>
+      <nav>
+        <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Прогнозы</a>
+        <a href="/history" class="{% if request.url.path == '/history' %}active{% endif %}">Ошибки</a>
+        <a href="/data" class="{% if request.url.path == '/data' %}active{% endif %}">Данные</a>
+        <a href="/methodology" class="{% if request.url.path == '/methodology' %}active{% endif %}">Алгоритм</a>
+      </nav>
+    </header>
+    {% block body %}{% endblock %}
+    <footer>
+      v{{ version }}
+      {% if run %} · последний ingest: {{ run.started_at|when }} ({{ run.status }}){% endif %}
+      {% if fng %} · Fear &amp; Greed {{ fng.value }} / {{ fng.classification }}{% endif %}
+    </footer>
+  </div>
+</body>
+</html>

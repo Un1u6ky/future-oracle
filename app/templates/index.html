@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Crypto Pulse — прогнозы на 24 часа{% endblock %}
+{% block body %}
+<section class="hero">
+  <h1>Куда сдвинется цена за сутки — и почему цифры так сложились.</h1>
+  <p>
+    Детерминированный скоринг по трём живым источникам: рынок CoinGecko, индекс страха Alternative.me
+    и заголовки CryptoCompare / CoinDesk / Cointelegraph. Никакого рандома: каждый прогноз пересчитывается
+    из строк в SQLite.
+  </p>
+</section>
+
+<div class="meta-row">
+  <div class="stat">
+    <div class="k">Разрешено прогнозов</div>
+    <div class="v">{{ accuracy.resolved }}</div>
+  </div>
+  <div class="stat">
+    <div class="k">Точность направления</div>
+    <div class="v">{% if accuracy.accuracy is not none %}{{ '%.0f'|format(accuracy.accuracy) }}%{% else %}—{% endif %}</div>
+  </div>
+  <div class="stat">
+    <div class="k">Brier score</div>
+    <div class="v">{% if accuracy.brier is not none %}{{ '%.3f'|format(accuracy.brier) }}{% else %}—{% endif %}</div>
+  </div>
+  <div class="stat">
+    <div class="k">Fear &amp; Greed</div>
+    <div class="v">{% if fng %}{{ fng.value }}{% else %}—{% endif %}</div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <h2>Живые прогнозы</h2>
+  <form method="post" action="/refresh">
+    <button type="submit">Обновить данные</button>
+  </form>
+</div>
+
+{% if not cards %}
+  <div class="panel">
+    <p>База пустая. Нажмите «Обновить данные» — система сходит в API, сохранит сырьё и посчитает прогнозы.</p>
+  </div>
+{% endif %}
+
+<div class="grid">
+  {% for card in cards %}
+    {% set f = card.forecast %}
+    {% set snap = card.used.get('snapshot', {}) %}
+    <a class="card" href="/asset/{{ card.asset.symbol }}">
+      <div class="card-top">
+        <span class="symbol">{{ card.asset.symbol }} · {{ card.asset.name }}</span>
+        <span class="price">${{ snap.get('price_usd')|price }}</span>
+      </div>
+      <h3>{{ DIRECTION_RU[f.direction]|capitalize }} за 24ч</h3>
+      <p class="dir {{ f.direction }}">P(рост) {{ '%.0f'|format(f.probability_up * 100) }}%</p>
+      <div class="bars">
+        <div class="bar">
+          <div class="k">Уверенность</div>
+          <div class="v">{{ '%.0f'|format(f.confidence) }}%</div>
+        </div>
+        <div class="bar">
+          <div class="k">Риск</div>
+          <div class="v"><span class="chip {{ f.risk_level }}">{{ RISK_RU[f.risk_level] }}</span></div>
+        </div>
+        <div class="bar">
+          <div class="k">Δ 24ч</div>
+          <div class="v">{{ snap.get('change_24h_pct')|pct }}</div>
+        </div>
+        <div class="bar">
+          <div class="k">Score</div>
+          <div class="v">{{ '%+.3f'|format(f.indicator.score) }}</div>
+        </div>
+      </div>
+    </a>
+  {% endfor %}
+</div>
+{% endblock %}
